@@ -1,31 +1,38 @@
-import React from 'react'
-import { MapPin, ChevronDown } from 'lucide-react'
+import React, { useState } from 'react'
+import { MapPin, ChevronDown, Loader, CheckCircle } from 'lucide-react'
+import { getUserState, US_STATES } from '../services/geolocationService'
+import { useUser } from '../context/UserContext'
 
 export default function StateSelector({ selectedState, onStateChange, variant = 'dropdown' }) {
-  const states = [
-    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
-    'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
-    'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
-    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
-    'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
-    'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
-    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
-    'Wisconsin', 'Wyoming'
-  ]
+  const { user, updateUser } = useUser()
+  const [detecting, setDetecting] = useState(false)
+  const [detectionSuccess, setDetectionSuccess] = useState(false)
 
-  const detectLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          // In a real app, you'd use a geocoding service to convert coordinates to state
-          alert('Location detected! This would normally determine your state automatically.')
-        },
-        (error) => {
-          alert('Unable to detect location. Please select your state manually.')
-        }
-      )
-    } else {
-      alert('Geolocation is not supported by this browser.')
+  const detectLocation = async () => {
+    setDetecting(true)
+    setDetectionSuccess(false)
+    
+    try {
+      const locationData = await getUserState()
+      
+      if (locationData.state && locationData.state !== 'Unknown') {
+        onStateChange(locationData.state)
+        updateUser({ 
+          state: locationData.state, 
+          city: locationData.city,
+          locationDetected: true 
+        })
+        
+        setDetectionSuccess(true)
+        setTimeout(() => setDetectionSuccess(false), 3000)
+      } else {
+        alert('Unable to determine your state from location. Please select manually.')
+      }
+    } catch (error) {
+      console.error('Location detection failed:', error)
+      alert('Unable to detect location. Please select your state manually.')
+    } finally {
+      setDetecting(false)
     }
   }
 
@@ -38,9 +45,22 @@ export default function StateSelector({ selectedState, onStateChange, variant = 
         </h3>
         <button
           onClick={detectLocation}
-          className="text-accent hover:text-accent/80 font-medium text-sm"
+          disabled={detecting}
+          className="text-accent hover:text-accent/80 font-medium text-sm flex items-center gap-xs disabled:opacity-50"
         >
-          Auto-detect location
+          {detecting ? (
+            <>
+              <Loader className="w-4 h-4 animate-spin" />
+              Detecting...
+            </>
+          ) : detectionSuccess ? (
+            <>
+              <CheckCircle className="w-4 h-4" />
+              Location detected!
+            </>
+          ) : (
+            'Auto-detect location'
+          )}
         </button>
       </div>
       
@@ -50,7 +70,7 @@ export default function StateSelector({ selectedState, onStateChange, variant = 
           onChange={(e) => onStateChange(e.target.value)}
           className="w-full p-md rounded-md bg-white/20 text-white border border-white/30 focus:border-accent focus:outline-none appearance-none cursor-pointer"
         >
-          {states.map(state => (
+          {US_STATES.map(state => (
             <option key={state} value={state} className="bg-gray-800">
               {state}
             </option>

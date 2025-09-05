@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react'
-import { Mic, Video, Square, Play, Pause, Save, Share, FileText } from 'lucide-react'
+import { Mic, Video, Square, Play, Pause, Save, Share, FileText, Upload, CheckCircle } from 'lucide-react'
 import { useRecording } from '../context/RecordingContext'
+import { useUser } from '../context/UserContext'
+import { uploadEvidenceRecord } from '../services/pinataService'
 
 export default function RecordButton() {
   const {
@@ -11,8 +13,12 @@ export default function RecordButton() {
     recordings
   } = useRecording()
   
+  const { user } = useUser()
+  
   const [notes, setNotes] = useState('')
   const [location, setLocation] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
 
   const handleStartRecording = async (type) => {
     try {
@@ -36,19 +42,68 @@ export default function RecordButton() {
     setLocation('')
   }
 
-  const saveRecord = () => {
-    const record = {
-      id: Date.now(),
-      timestamp: new Date().toLocaleString(),
-      location: location || 'Unknown',
-      notes: notes || 'No notes',
-      hasAudio: recordingType === 'audio',
-      hasVideo: recordingType === 'video'
+  const saveRecord = async () => {
+    if (recordings.length === 0) {
+      alert('No recordings to save!')
+      return
     }
-    
-    // In a real app, this would save to backend/Pinata
-    console.log('Saving record:', record)
-    alert('Recording saved successfully!')
+
+    setUploading(true)
+    setUploadSuccess(false)
+
+    try {
+      const recordId = `record_${Date.now()}`
+      const recordData = {
+        recordId,
+        userId: user.userId,
+        timestamp: new Date().toISOString(),
+        location: location || 'Unknown',
+        notes: notes || 'No notes',
+        hasAudio: recordingType === 'audio',
+        hasVideo: recordingType === 'video'
+      }
+
+      // Get the latest recording files
+      const recordingFiles = recordings.map(recording => {
+        return new File([recording.blob], `${recordId}_${recording.type}.webm`, {
+          type: recording.blob.type
+        })
+      })
+
+      // Upload to IPFS via Pinata
+      const uploadResult = await uploadEvidenceRecord(recordData, recordingFiles)
+      
+      console.log('Evidence uploaded successfully:', uploadResult)
+      
+      // Store record locally for user access
+      const savedRecord = {
+        ...recordData,
+        ipfsHash: uploadResult.ipfsHash,
+        ipfsUrl: uploadResult.ipfsUrl,
+        files: uploadResult.files
+      }
+      
+      // Save to localStorage for demo (in production, this would be in a database)
+      const existingRecords = JSON.parse(localStorage.getItem('evidenceRecords') || '[]')
+      existingRecords.push(savedRecord)
+      localStorage.setItem('evidenceRecords', JSON.stringify(existingRecords))
+      
+      setUploadSuccess(true)
+      
+      // Reset form
+      setNotes('')
+      setLocation('')
+      
+      setTimeout(() => {
+        setUploadSuccess(false)
+      }, 3000)
+      
+    } catch (error) {
+      console.error('Failed to save record:', error)
+      alert('Failed to save recording. Please try again.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -134,11 +189,25 @@ export default function RecordButton() {
         
         <button
           onClick={saveRecord}
-          disabled={!notes && !location}
+          disabled={(!notes && !location) || uploading}
           className="mt-lg inline-flex items-center gap-sm px-lg py-md bg-accent text-white rounded-md font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save className="w-5 h-5" />
-          Save Record
+          {uploading ? (
+            <>
+              <Upload className="w-5 h-5 animate-spin" />
+              Uploading to IPFS...
+            </>
+          ) : uploadSuccess ? (
+            <>
+              <CheckCircle className="w-5 h-5" />
+              Saved Successfully!
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              Save Record
+            </>
+          )}
         </button>
       </div>
 

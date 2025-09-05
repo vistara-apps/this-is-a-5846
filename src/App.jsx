@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Shield, Menu, X, MapPin, Globe, Mic, Video, FileText, Phone, AlertTriangle, Check } from 'lucide-react'
+import { generateLegalSummary } from './services/openaiService'
 import AppHeader from './components/AppHeader'
 import Dashboard from './components/Dashboard'
 import ScriptDisplay from './components/ScriptDisplay'
@@ -49,8 +50,25 @@ function StateLaws() {
 
   const fetchStateLaws = async (state) => {
     setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
+    
+    const topics = ['Traffic Stops', 'Search and Seizure', 'Recording Police']
+    const language = 'english' // TODO: Get from UserContext
+    
+    try {
+      const lawPromises = topics.map(async (topic) => {
+        const content = await generateLegalSummary(topic, state, language)
+        return {
+          topic,
+          summary: content.summary || content,
+          details: content.details || content
+        }
+      })
+      
+      const lawsData = await Promise.all(lawPromises)
+      setLaws(lawsData)
+    } catch (error) {
+      console.error('Failed to fetch state laws:', error)
+      // Fallback to basic content
       setLaws([
         {
           topic: 'Traffic Stops',
@@ -68,8 +86,9 @@ function StateLaws() {
           details: state + ' law generally allows recording of police activities in public areas.'
         }
       ])
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   useEffect(() => {
@@ -115,24 +134,25 @@ function StateLaws() {
 
 // My Records Component
 function MyRecords() {
-  const [records, setRecords] = useState([
-    {
-      id: 1,
-      timestamp: '2024-01-15 14:30',
-      location: 'Downtown LA',
-      notes: 'Traffic stop on Sunset Blvd',
-      hasAudio: true,
-      hasVideo: false
-    },
-    {
-      id: 2,
-      timestamp: '2024-01-10 09:15',
-      location: 'Beverly Hills',
-      notes: 'Routine ID check',
-      hasAudio: false,
-      hasVideo: true
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Load records from localStorage
+    const loadRecords = () => {
+      try {
+        const savedRecords = JSON.parse(localStorage.getItem('evidenceRecords') || '[]')
+        setRecords(savedRecords)
+      } catch (error) {
+        console.error('Failed to load records:', error)
+        setRecords([])
+      } finally {
+        setLoading(false)
+      }
     }
-  ])
+
+    loadRecords()
+  }, [])
 
   return (
     <div className="space-y-lg">
@@ -141,38 +161,69 @@ function MyRecords() {
         <p className="text-lg text-white/80">Your saved encounter evidence</p>
       </div>
 
-      <div className="space-y-md">
-        {records.map(record => (
-          <div key={record.id} className="card-gradient rounded-lg p-lg">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-md">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-white mb-sm">{record.timestamp}</h3>
-                <p className="text-white/80 mb-sm flex items-center gap-sm">
-                  <MapPin className="w-4 h-4" />
-                  {record.location}
-                </p>
-                <p className="text-white/70">{record.notes}</p>
-              </div>
-              
-              <div className="flex gap-sm">
-                {record.hasAudio && (
-                  <button className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors">
-                    <Mic className="w-5 h-5 text-white" />
+      {loading ? (
+        <div className="space-y-md">
+          {[1,2,3].map(i => (
+            <div key={i} className="card-gradient rounded-lg p-lg animate-pulse-slow">
+              <div className="h-6 bg-white/20 rounded mb-md"></div>
+              <div className="h-4 bg-white/10 rounded mb-sm"></div>
+              <div className="h-4 bg-white/10 rounded w-3/4"></div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-md">
+          {records.map(record => (
+            <div key={record.recordId || record.id} className="card-gradient rounded-lg p-lg">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-md">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white mb-sm">
+                    {new Date(record.timestamp).toLocaleString()}
+                  </h3>
+                  <p className="text-white/80 mb-sm flex items-center gap-sm">
+                    <MapPin className="w-4 h-4" />
+                    {record.location}
+                  </p>
+                  <p className="text-white/70 mb-sm">{record.notes}</p>
+                  {record.ipfsHash && (
+                    <p className="text-xs text-white/50">
+                      IPFS: {record.ipfsHash.substring(0, 20)}...
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex gap-sm">
+                  {record.hasAudio && (
+                    <button 
+                      onClick={() => record.ipfsUrl && window.open(record.ipfsUrl, '_blank')}
+                      className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors"
+                      title="View on IPFS"
+                    >
+                      <Mic className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+                  {record.hasVideo && (
+                    <button 
+                      onClick={() => record.ipfsUrl && window.open(record.ipfsUrl, '_blank')}
+                      className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors"
+                      title="View on IPFS"
+                    >
+                      <Video className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => record.ipfsUrl && window.open(record.ipfsUrl, '_blank')}
+                    className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors"
+                    title="View full record on IPFS"
+                  >
+                    <FileText className="w-5 h-5 text-white" />
                   </button>
-                )}
-                {record.hasVideo && (
-                  <button className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors">
-                    <Video className="w-5 h-5 text-white" />
-                  </button>
-                )}
-                <button className="p-sm bg-white/20 rounded-md hover:bg-white/30 transition-colors">
-                  <FileText className="w-5 h-5 text-white" />
-                </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {records.length === 0 && (
         <div className="text-center py-xl">

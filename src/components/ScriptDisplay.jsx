@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Copy, Volume2, Globe, RefreshCw } from 'lucide-react'
 import LanguageSelector from './LanguageSelector'
 import { generateScript } from '../services/openaiService'
+import { useUser } from '../context/UserContext'
 
 export default function ScriptDisplay() {
+  const { user } = useUser()
   const [selectedLanguage, setSelectedLanguage] = useState('english')
   const [selectedScenario, setSelectedScenario] = useState('traffic-stop')
   const [scripts, setScripts] = useState({})
@@ -40,14 +42,21 @@ export default function ScriptDisplay() {
   const loadScript = async () => {
     setLoading(true)
     
-    // Use default scripts for demo - in production, this would call OpenAI API
-    const script = defaultScripts[selectedScenario]?.[selectedLanguage] || defaultScripts['traffic-stop']['english']
-    
-    // Simulate API delay
-    setTimeout(() => {
+    try {
+      // Get user's state from context
+      const userState = user.state || 'California'
+      
+      // Generate script using OpenAI service
+      const script = await generateScript(selectedScenario, selectedLanguage, userState)
       setScripts(script)
+    } catch (error) {
+      console.error('Failed to load script:', error)
+      // Fallback to default scripts
+      const script = defaultScripts[selectedScenario]?.[selectedLanguage] || defaultScripts['traffic-stop']['english']
+      setScripts(script)
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   const copyToClipboard = (text) => {
@@ -68,6 +77,14 @@ export default function ScriptDisplay() {
       <div className="text-center mb-xl">
         <h1 className="text-4xl font-bold text-white mb-md">On-the-Spot Scripts</h1>
         <p className="text-lg text-white/80">Know exactly what to say during police encounters</p>
+        {user.state && (
+          <div className="mt-md">
+            <span className="inline-flex items-center gap-xs px-md py-xs bg-accent/20 text-accent rounded-full text-sm">
+              📍 Scripts for {user.state}
+              {user.locationDetected && <span className="text-xs opacity-75">(auto-detected)</span>}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Controls */}

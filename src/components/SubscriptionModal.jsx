@@ -1,7 +1,13 @@
-import React from 'react'
-import { X, Check, Star } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Check, Star, CreditCard, Loader } from 'lucide-react'
+import { useUser } from '../context/UserContext'
+import { createPaymentIntent } from '../services/stripeService'
 
 export default function SubscriptionModal({ onClose }) {
+  const { user, updateUser } = useUser()
+  const [loading, setLoading] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(null)
+
   const plans = [
     {
       name: 'Free',
@@ -13,7 +19,7 @@ export default function SubscriptionModal({ onClose }) {
         'Limited recording storage',
         'Community support'
       ],
-      current: true
+      current: user.subscriptionTier === 'free'
     },
     {
       name: 'Premium',
@@ -28,16 +34,60 @@ export default function SubscriptionModal({ onClose }) {
         'Priority support',
         'Legal consultation referrals'
       ],
-      recommended: true
+      recommended: true,
+      current: user.subscriptionTier === 'premium'
     }
   ]
 
-  const handleSubscribe = (plan) => {
-    if (plan.name === 'Premium') {
-      // In a real app, this would integrate with Stripe
-      alert('Stripe integration would handle payment here')
+  const handleSubscribe = async (plan) => {
+    if (plan.current) return
+    
+    if (plan.name === 'Free') {
+      // Downgrade to free
+      updateUser({ subscriptionTier: 'free' })
+      onClose()
+      return
     }
-    onClose()
+
+    if (plan.name === 'Premium') {
+      setLoading(true)
+      setSelectedPlan(plan.name)
+      
+      try {
+        // Check if Stripe is configured
+        const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+        
+        if (!stripeKey || stripeKey === 'your_stripe_publishable_key_here') {
+          // Demo mode - simulate successful payment
+          console.log('Demo mode: Simulating successful payment')
+          updateUser({ subscriptionTier: 'premium' })
+          alert('Demo: Upgraded to Premium! (No actual payment processed)')
+          onClose()
+          return
+        }
+        
+        // In production, this would:
+        // 1. Create payment intent with Stripe
+        // 2. Show Stripe payment form
+        // 3. Process payment
+        // 4. Update user subscription
+        
+        const paymentIntent = await createPaymentIntent(5.00) // $5.00
+        console.log('Payment intent created:', paymentIntent)
+        
+        // For now, simulate successful payment
+        updateUser({ subscriptionTier: 'premium' })
+        alert('Successfully upgraded to Premium!')
+        onClose()
+        
+      } catch (error) {
+        console.error('Payment failed:', error)
+        alert('Payment failed. Please try again.')
+      } finally {
+        setLoading(false)
+        setSelectedPlan(null)
+      }
+    }
   }
 
   return (
@@ -104,9 +154,23 @@ export default function SubscriptionModal({ onClose }) {
                       ? 'bg-accent text-white hover:bg-accent/90'
                       : 'bg-primary text-white hover:bg-primary/90'
                   }`}
-                  disabled={plan.current}
+                  disabled={plan.current || (loading && selectedPlan === plan.name)}
                 >
-                  {plan.current ? 'Current Plan' : `Choose ${plan.name}`}
+                  {loading && selectedPlan === plan.name ? (
+                    <span className="flex items-center justify-center gap-sm">
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Processing...
+                    </span>
+                  ) : plan.current ? (
+                    'Current Plan'
+                  ) : plan.name === 'Premium' ? (
+                    <span className="flex items-center justify-center gap-sm">
+                      <CreditCard className="w-5 h-5" />
+                      Upgrade to Premium
+                    </span>
+                  ) : (
+                    `Choose ${plan.name}`
+                  )}
                 </button>
               </div>
             ))}
